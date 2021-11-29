@@ -1,27 +1,29 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect, useRef } from "react";
-import { useIntl } from "react-intl";
-import { toast } from "react-toastify";
-import cx from "classnames";
-import _ from "lodash";
-import lookie from "lookie";
+import { useState, useEffect, useRef } from 'react';
+import { FormattedMessage, useIntl } from 'react-intl';
+import { toast } from 'react-toastify';
+import cx from 'classnames';
+import lookie from 'lookie';
 
-import Mousetrap from "../../utils/mousetrap";
-import setCaretPosition from "../../utils/setCaretPosition";
-import tagWrapper from "../../utils/tagWrapper";
-import isSafari from "../../utils/isSafari";
+import Mousetrap from '../../utils/mousetrap';
+import setCaretPosition from '../../utils/setCaretPosition';
+import tagWrapper from '../../utils/tagWrapper';
+import isSafari from '../../utils/isSafari';
+import checkRegex from '../../utils/checkRegex';
 
-import Hint from "../Hint";
-import ReportStep from "../ReportStep";
-import FlagBox from "../FlagBox";
+import Hint from '../Hint';
+import ReportStep from '../ReportStep';
+import FlagBox from '../FlagBox';
 
-import shortcuts from "../../shortcuts";
+import shortcuts from '../../shortcuts';
+
+import * as styles from './InteractiveArea.module.css';
 
 function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
   const { formatMessage } = useIntl();
   const regexInput = useRef(null);
-  const [regex, setRegex] = useState(data.initialValue || "");
-  const [flags, setFlags] = useState(data.initialFlags || "");
+  const [regex, setRegex] = useState(data.initialValue || '');
+  const [flags, setFlags] = useState(data.initialFlags || '');
   const [isChanged, setIsChanged] = useState(false);
   const [content, setContent] = useState(null);
   const [error, setError] = useState(false);
@@ -30,31 +32,25 @@ function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
 
   const isSafariAndAccept = isSafari() && data.safariAccept;
 
-
-  const setLocalStorage = () => {
-    const completedSteps = lookie.get("completedSteps") || [];
-
-    if (!completedSteps.includes(data.title)) {
-      completedSteps.push(data.title);
-      lookie.set("completedSteps", completedSteps);
-    }
-  }
-
   const toastConfig = {
-    theme: "colored",
+    theme: 'colored',
     autoClose: true,
-    position: "top-center",
+    position: 'top-center',
   };
 
-  const checkRegex = () => {
+  const skipStep = () => {
+    setError(false);
+    setSuccess(true);
+  };
+
+  const applyRegex = () => {
     if (data.interactive === false) return true;
 
     if (isSafariAndAccept) {
       if (data.regex[0] == regex) {
         setError(false);
         setSuccess(true);
-        setLocalStorage();
-        toast.success(formatMessage({ id: "general.completedStep" }), toastConfig);
+        toast.success(formatMessage({ id: 'general.completedStep' }), toastConfig);
       } else {
         setError(true);
         setSuccess(false);
@@ -62,60 +58,34 @@ function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
       return true;
     }
 
-    try {
-      let $regex = regex;
-      [...$regex.matchAll(/\\(\d+)/g)].forEach((item) => {
-        $regex = $regex.replace(
-          `\\${item[1]}`,
-          `\\${parseInt(item[1], 10) + 1}`
-        );
-      });
+    const { isSuccess, isMatch, err, $regex } = checkRegex(data, { regex, flags });
 
-      const reg = new RegExp(`(${$regex})`, flags);
-      const matchType = flags?.includes("g") ? "matchAll" : "match";
-      const isMatchAll = matchType === "matchAll";
-      const regResult = [...data.content[matchType](reg)]
-        .map((res) => (isMatchAll ? res[0] : res))
-        .filter((res) => !!res);
+    toast.dismiss();
 
-      const isMatch =
-        data.answer.length === regResult.length &&
-        _.isEmpty(_.xor(data.answer, regResult));
-
-      const isSuccess =
-        isMatch &&
-        data.regex.includes(regex) &&
-        _.isEmpty(_.xor(data.flags.split(""), flags.split("")));
-
+    if (err) {
+      setError(err);
+    } else {
       setMatch(isMatch);
       setSuccess(isSuccess);
 
-      toast.dismiss();
-
       if (regex) {
-        setContent(
-          tagWrapper(data.content, reg, "step-interactive-result-tag")
-        );
+        setContent(tagWrapper(data.content, $regex, styles.InteractiveAreaResultTag));
       } else {
         setContent(data.content);
       }
 
       if (isChanged && isSuccess) {
-        toast.success(formatMessage({ id: "general.completedStep" }), toastConfig);
-        setLocalStorage();
+        toast.success(formatMessage({ id: 'general.completedStep' }), toastConfig);
         setError(false);
       } else if (isMatch) {
         setError(false);
       } else {
         setError(true);
       }
-    } catch (err) {
-      console.log(err);
-      setError(true);
     }
   };
 
-  const onChange = (e) => {
+  const onChange = e => {
     setIsChanged(true);
     setRegex(e.target.value);
   };
@@ -143,13 +113,13 @@ function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
       return;
     }
 
-    const progress = lookie.get("completedSteps") || [];
-    const isCompletedStep = progress.includes(data.title);
+    const lastStep = lookie.get('lastStep') || 0;
+    const isCompletedStep = step < lastStep;
 
-    checkRegex();
+    applyRegex();
     setContent(data.content);
-    setFlags(isCompletedStep ? data.flags : data.initialFlags || "");
-    setRegex((isCompletedStep ? data.regex[0] : data.initialValue) || "");
+    setFlags(isCompletedStep ? data.flags : data.initialFlags || '');
+    setRegex((isCompletedStep ? data.regex[0] : data.initialValue) || '');
     setIsChanged(false);
     blurInput();
     setTimeout(() => {
@@ -163,7 +133,7 @@ function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
   }, [success, onChangeSuccess]);
 
   useEffect(() => {
-    Mousetrap.bindGlobal(shortcuts.focus, (e) => {
+    Mousetrap.bindGlobal(shortcuts.focus, e => {
       e.preventDefault();
       focusInput();
     });
@@ -171,44 +141,47 @@ function InteractiveArea({ data, step, isShow, parentError, onChangeSuccess }) {
     return () => Mousetrap.unbind(shortcuts.focus);
   }, []);
 
-  useEffect(checkRegex, [regex, flags, step]);
+  useEffect(applyRegex, [regex, flags, step]);
 
   if (!isShow) return null;
 
-  const highlightedContent = (content || data.content || "").replace(
-    /\n/gm,
-    "<br />"
-  );
+  const highlightedContent = (content || data.content || '').replace(/\n/gm, '<br />');
 
   const placeholder = formatMessage({
-    id: "general.regex",
+    id: 'general.regex',
   }).toLowerCase();
 
   return (
     <div
-      className={cx("step-interactive", {
-        error,
-        success,
-        match,
-        parentError,
+      className={cx({
+        [styles.InteractiveAreaError]: error,
+        [styles.InteractiveAreaMatch]: match,
+        [styles.InteractiveAreaSuccess]: success,
+        [styles.InteractiveAreaParentError]: parentError,
       })}
     >
       <div
-        className="step-interactive-block step-interactive-block-content"
-        data-title={formatMessage({ id: "general.text" })}
+        className={styles.InteractiveAreaBlockContent}
+        data-title={formatMessage({ id: 'general.text' })}
         dangerouslySetInnerHTML={{ __html: highlightedContent }}
       />
+      {isSafariAndAccept && (
+        <div className={styles.SafariWarning} onClick={skipStep}>
+          <FormattedMessage id="learn.safari.unsupportWarning" />
+        </div>
+      )}
       <div
-        className="step-interactive-block step-interactive-block-regex"
-        data-title={formatMessage({ id: "general.regex" })}
+        className={styles.InteractiveAreaBlockRegex}
+        data-title={formatMessage({ id: 'general.regex' })}
       >
         <ReportStep data={data} step={step} />
         <Hint regex={data.regex} flags={data.flags} />
-        <div className="step-interactive-input" data-flags={flags}>
+        <div className={styles.InteractiveAreaInputWrapper} data-flags={flags}>
           <input
             ref={regexInput}
             key={step}
             type="text"
+            className={styles.InteractiveAreaInput}
             style={{ width: regex.length * 15 || 60 }}
             readOnly={data.readOnly}
             value={regex}

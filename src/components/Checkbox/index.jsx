@@ -1,8 +1,10 @@
+import * as styles from './Checkbox.module.css';
+
 const Checkbox = ({ children, ...props }) => (
-  <label className="checkbox" htmlFor={props.id}>
-    <input className="checkbox-item" type="checkbox" {...props} />
-    <span className="checkmark" />
-    {children}
+  <label className={styles.Checkbox} htmlFor={props.id}>
+    <input className={styles.CheckboxInput} type="checkbox" {...props} />
+    <span className={styles.CheckboxCheck} />
+    <span className={styles.CheckboxText}>{children}</span>
   </label>
 );
 
